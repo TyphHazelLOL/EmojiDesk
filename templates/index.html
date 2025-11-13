@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>EmojiDesk — Купи свою клетку</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #f6f6f6;
+            margin: 0;
+            padding: 20px;
+        }
+        .wrap {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        #gridContainer {
+            overflow: auto;
+            max-height: 700px;
+            margin-top: 20px;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            background: #fff;
+        }
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(96, 16px);
+            grid-auto-rows: 16px;
+            gap: 1px;
+            justify-content: center;
+        }
+        .cell {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #eaeaea;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s, border 0.2s;
+            background-size: cover;
+            background-position: center;
+        }
+        .cell:hover { background: #f0f0f0; }
+        .cell.selected { background: #cce5ff !important; border: 2px solid #007bff !important; }
+        .cell.sold { cursor: not-allowed; }
+        .stats { display:flex; gap:12px; margin:18px 0; flex-wrap:wrap; justify-content:center; }
+        .stat { background:#f8f9fa; padding:12px 16px; border-radius:10px; border-left:4px solid #007bff; min-width:120px; text-align:center; }
+        .stat .num { font-weight:700; font-size:18px; color:#007bff; }
+        .controls { padding:18px; background:#f8f9fa; border-radius:12px; border:2px solid #e9ecef; margin-bottom:20px; }
+        select, button { padding:10px 12px; border-radius:8px; border:1px solid #ddd; font-size:15px; }
+        .buy-button { background:#28a745; color:#fff; border:none; font-weight:700; min-width:220px; cursor:pointer; }
+        .buy-button[disabled] { background:#6c757d; cursor:not-allowed; }
+        .payment-info { background:#e7f3ff; padding:12px; border-radius:8px; border:2px solid #b3d9ff; text-align:left; }
+        .modal { position:fixed; inset:0; background:rgba(0,0,0,.66); display:none; place-items:center; z-index:1200; }
+        .modal .box { background:#fff; padding:18px; border-radius:12px; max-width:460px; width:92%; position:relative; }
+        .close { position:absolute; right:12px; top:8px; background:none; border:none; font-size:20px; cursor:pointer; }
+        footer { text-align:center; color:#666; margin-top:12px; font-size:13px; }
+        .instructions { background: #fff3cd; padding: 15px; border-radius: 10px; margin: 15px 0; border-left: 4px solid #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h1>🎯 EmojiDesk — Купи свою клетку</h1>
+
+        <div class="instructions">
+            <p><strong>💡 Как купить клетки:</strong></p>
+            <p>1. Выбери эмодзи и нажимай на клетки чтобы выделить их</p>
+            <p>2. Нажми "ОПЛАТИТЬ" и отправь точную сумму через DonationAlerts</p>
+            <p>3. После оплаты твои эмодзи появятся на доске!</p>
+        </div>
+
+        <div class="stats" id="stats">
+            <div class="stat"><div class="num" id="totalCells">9216</div>Всего клеток</div>
+            <div class="stat"><div class="num" id="soldCells">0</div>Занято</div>
+            <div class="stat"><div class="num" id="freeCells">9216</div>Свободно</div>
+            <div class="stat"><div class="num" id="completionPercent">0%</div>Заполнено</div>
+        </div>
+
+        <div class="controls">
+            <label for="emojiSelector">Эмодзи:</label>
+            <select id="emojiSelector">
+                <option value="smile">😀 Улыбка</option>
+                <option value="cool">😎 Крутой</option>
+                <option value="clown">🤡 Клоун</option>
+                <option value="skull">💀 Череп</option>
+                <option value="heart">❤️ Сердце</option>
+                <option value="fire">🔥 Огонь</option>
+                <option value="rocket">🚀 Ракета</option>
+                <option value="rainbow">🌈 Радуга</option>
+                <option value="target">🎯 Мишень</option>
+                <option value="star">⭐ Звезда</option>
+            </select>
+            <span id="selectedInfo" style="margin-left:20px;">Нажимай на клетки чтобы выбрать их!</span>
+            <div style="margin-top:10px;">
+                <button id="buyButton" class="buy-button" disabled>ВЫБРАТЬ КЛЕТКИ</button>
+            </div>
+        </div>
+
+        <div id="gridContainer">
+            <div id="grid"></div>
+        </div>
+
+        <footer>Каждая клетка = 1 рубль. После оплаты через DonationAlerts клетка закрепляется за тобой.</footer>
+    </div>
+
+    <!-- Payment Modal -->
+    <div id="paymentModal" class="modal">
+        <div class="box">
+            <button class="close" id="closeModal">×</button>
+            <h3>Оплата через DonationAlerts</h3>
+            <div class="payment-info">
+                <p><strong>Выбранные клетки:</strong> <span id="paymentCellCount">0</span> шт</p>
+                <p><strong>Эмодзи:</strong> <span id="paymentEmoji">😀</span></p>
+                <p><strong>Отправьте точную сумму:</strong> <span id="paymentAmount">0</span> руб</p>
+                <p><strong>В сообщении укажите:</strong> "<span id="paymentMessage">order_xxx</span>"</p>
+                <p>После оплаты дождитесь подтверждения (автоматически, до 1 минуты).</p>
+            </div>
+            <a id="donateLink" href="#" target="_blank" class="buy-button" style="background:#ff5722; margin-top:10px; text-decoration:none; display:inline-block;">Перейти к оплате</a>
+            <div id="paymentStatus" style="margin-top:10px; background:#fff3cd; padding:8px; border-radius:8px;">⏳ Ожидание оплаты...</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const GRID_SIZE = 96;
+        const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
+        const PRICE_PER_CELL = 1;
+
+        let selectedCells = [];
+        let orderNumber = null;
+        let socket = null;
+
+        const grid = document.getElementById('grid');
+        const buyButton = document.getElementById('buyButton');
+        const selectedInfo = document.getElementById('selectedInfo');
+        const paymentModal = document.getElementById('paymentModal');
+        const paymentStatus = document.getElementById('paymentStatus');
+        const paymentAmount = document.getElementById('paymentAmount');
+        const paymentCellCount = document.getElementById('paymentCellCount');
+        const paymentEmoji = document.getElementById('paymentEmoji');
+        const paymentMessage = document.getElementById('paymentMessage');
+        const donateLink = document.getElementById('donateLink');
+
+        function getEmojiImage(emojiType) {
+            const emojiMap = {
+                'smile': '/static/images/smile.png',
+                'cool': '/static/images/cool.png',
+                'clown': '/static/images/clown.png',
+                'skull': '/static/images/skull.png',
+                'heart': '/static/images/heart.png',
+                'fire': '/static/images/fire.png',
+                'rocket': '/static/images/rocket.png',
+                'rainbow': '/static/images/rainbow.png',
+                'target': '/static/images/target.png',
+                'star': '/static/images/star.png'
+            };
+            return emojiMap[emojiType] || '/static/images/smile.png';
+        }
+
+        function getEmojiDisplay(emojiType) {
+            const displayMap = {
+                'smile': '😀', 'cool': '😎', 'clown': '🤡', 'skull': '💀',
+                'heart': '❤️', 'fire': '🔥', 'rocket': '🚀', 'rainbow': '🌈',
+                'target': '🎯', 'star': '⭐'
+            };
+            return displayMap[emojiType] || '😀';
+        }
+
+        // Инициализация сетки
+        function renderEmptyGrid() {
+            grid.innerHTML = '';
+            grid.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 16px)`;
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${x}-${y}`;
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    cell.addEventListener('click', () => onCellClick(x, y));
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        function updateSelectionVisuals() {
+            document.querySelectorAll('.cell.selected').forEach(el => el.classList.remove('selected'));
+            selectedCells.forEach(cell => {
+                const el = document.getElementById(`cell-${cell.x}-${cell.y}`);
+                if (el && !el.classList.contains('sold')) el.classList.add('selected');
+            });
+        }
+
+        function updateSelectionInfo() {
+            const total = selectedCells.length;
+            const price = total * PRICE_PER_CELL;
+            if (total === 0) {
+                selectedInfo.textContent = 'Нажимай на клетки чтобы выбрать их!';
+                buyButton.disabled = true;
+                buyButton.textContent = 'ВЫБРАТЬ КЛЕТКИ';
+            } else {
+                const emoji = getEmojiDisplay(selectedCells[0].emoji);
+                selectedInfo.textContent = `Выбрано: ${total} клеток | Эмодзи: ${emoji} | Итого: ${price} руб`;
+                buyButton.disabled = false;
+                buyButton.textContent = `ОПЛАТИТЬ ${price} РУБ`;
+            }
+        }
+
+        function onCellClick(x, y) {
+            const el = document.getElementById(`cell-${x}-${y}`);
+            if (!el || el.classList.contains('sold')) return;
+            const emoji = document.getElementById('emojiSelector').value;
+            const foundIndex = selectedCells.findIndex(c => c.x === x && c.y === y);
+            if (foundIndex === -1) selectedCells.push({ x, y, emoji });
+            else selectedCells.splice(foundIndex, 1);
+            updateSelectionInfo();
+            updateSelectionVisuals();
+        }
+
+        document.getElementById('emojiSelector').addEventListener('change', () => {
+            const newEmoji = document.getElementById('emojiSelector').value;
+            selectedCells = selectedCells.map(cell => ({ ...cell, emoji: newEmoji }));
+            updateSelectionInfo();
+            updateSelectionVisuals();
+        });
+
+        buyButton.addEventListener('click', async () => {
+            if (selectedCells.length === 0) return alert('Выберите клетки для покупки');
+            try {
+                const response = await fetch('/api/buy_cells', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cells: selectedCells })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Ошибка при создании заказа');
+                orderNumber = data.order_number;
+                paymentAmount.textContent = Number(data.amount).toFixed(2);
+                paymentCellCount.textContent = data.cell_count;
+                paymentEmoji.textContent = getEmojiDisplay(selectedCells[0].emoji);
+                paymentMessage.textContent = data.payment_message;
+                donateLink.href = 'https://www.donationalerts.com/r/your_channel';
+                paymentModal.style.display = 'grid';
+                paymentStatus.textContent = '⏳ Ожидание оплаты...';
+                pollPaymentStatus(orderNumber);
+            } catch (error) {
+                alert('Ошибка: ' + error.message);
+            }
+        });
+
+        document.getElementById('closeModal').addEventListener('click', () => {
+            paymentModal.style.display = 'none';
+        });
+
+        // Проверка оплаты
+        let pollInterval = null;
+        function pollPaymentStatus(order) {
+            if (pollInterval) clearInterval(pollInterval);
+            let attempts = 0;
+            pollInterval = setInterval(async () => {
+                attempts++;
+                try {
+                    const response = await fetch(`/api/check_payment/${order}`);
+                    const data = await response.json();
+                    if (data.status === 'confirmed') {
+                        clearInterval(pollInterval);
+                        paymentStatus.textContent = '✅ Оплата подтверждена! Эмодзи добавлены.';
+                        paymentStatus.style.background = '#d4edda';
+                        selectedCells.forEach(cell => {
+                            const el = document.getElementById(`cell-${cell.x}-${cell.y}`);
+                            if (el) {
+                                el.classList.add('sold');
+                                el.classList.remove('selected');
+                                el.style.backgroundImage = `url('${getEmojiImage(cell.emoji)}')`;
+                            }
+                        });
+                        updateStats(selectedCells.length);
+                        selectedCells = [];
+                        updateSelectionInfo();
+                        setTimeout(() => { paymentModal.style.display = 'none'; }, 1500);
+                    } else if (data.status === 'partial') {
+                        paymentStatus.textContent = `❗ Неверная сумма. Отправьте ещё ${data.remaining} руб — тогда эмодзи появятся.`;
+                        paymentStatus.style.background = '#fff3cd';
+                    } else if (data.status === 'pending') {
+                        paymentStatus.textContent = '⏳ Ожидание оплаты...';
+                        paymentStatus.style.background = '';
+                    }
+                } catch (err) {
+                    console.warn('Ошибка проверки платежа', err);
+                }
+                if (attempts > 60) {
+                    clearInterval(pollInterval);
+                    paymentStatus.textContent = '⏰ Проверка остановлена. Обновите страницу.';
+                    paymentStatus.style.background = '#fff3cd';
+                }
+            }, 5000);
+        }
+
+        function updateStats(added = 0) {
+            const soldEl = document.getElementById('soldCells');
+            const freeEl = document.getElementById('freeCells');
+            const percentEl = document.getElementById('completionPercent');
+
+            const soldNow = parseInt(soldEl.textContent || '0', 10) + added;
+            soldEl.textContent = soldNow;
+            freeEl.textContent = TOTAL_CELLS - soldNow;
+
+            // ✅ процент с двумя знаками после запятой
+            const percent = ((soldNow / TOTAL_CELLS) * 100).toFixed(2);
+            percentEl.textContent = percent + '%';
+        }
+
+
+        // WebSocket
+        function connectWebSocket() {
+            socket = io();
+            socket.on('connect', () => console.log('Connected'));
+            socket.on('pixel_update', (data) => {
+                const el = document.getElementById(`cell-${data.x}-${data.y}`);
+                if (el && !el.classList.contains('sold')) {
+                    el.classList.add('sold');
+                    el.style.backgroundImage = `url('${getEmojiImage(data.emoji)}')`;
+                    updateStats(1);
+                }
+            });
+            socket.on('disconnect', () => console.log('Disconnected'));
+        }
+
+        async function loadExistingPixels() {
+            try {
+                const response = await fetch('/api/pixels');
+                const pixels = await response.json();
+
+                // Отмечаем занятые клетки
+                pixels.forEach(pixel => {
+                    const el = document.getElementById(`cell-${pixel.x}-${pixel.y}`);
+                    if (el && pixel.emoji) {
+                        el.classList.add('sold');
+                        el.style.backgroundImage = `url('${getEmojiImage(pixel.emoji)}')`;
+                    }
+                });
+
+                // Обновляем статистику
+                const soldCount = pixels.length;
+                const freeCount = TOTAL_CELLS - soldCount;
+                const percent = ((soldCount / TOTAL_CELLS) * 100).toFixed(2);
+
+                document.getElementById('soldCells').textContent = soldCount;
+                document.getElementById('freeCells').textContent = freeCount;
+                document.getElementById('completionPercent').textContent = percent + '%';
+
+            } catch (err) {
+                console.error('Ошибка при загрузке пикселей:', err);
+            }
+        }
+
+
+        async function init() {
+            renderEmptyGrid();
+            await loadExistingPixels();
+            connectWebSocket();
+        }
+
+        init();
+    </script>
+</body>
+</html>
