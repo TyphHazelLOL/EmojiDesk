@@ -126,7 +126,7 @@
                 <p><strong>В сообщении укажите:</strong> "<span id="paymentMessage">order_xxx</span>"</p>
                 <p>После оплаты дождитесь подтверждения (автоматически, до 1 минуты).</p>
             </div>
-            <a id="donateLink" href="https://www.donationalerts.com/r/EmojiAdd" target="_blank" class="buy-button" style="background:#ff5722; margin-top:10px; text-decoration:none; display:inline-block;">Перейти к оплате</a>
+            <a id="donateLink" href="" target="_blank" class="buy-button" style="background:#ff5722; margin-top:10px; text-decoration:none; display:inline-block;">Перейти к оплате</a>
             <div id="paymentStatus" style="margin-top:10px; background:#fff3cd; padding:8px; border-radius:8px;">⏳ Ожидание оплаты...</div>
         </div>
     </div>
@@ -250,7 +250,7 @@
                 paymentCellCount.textContent = data.cell_count;
                 paymentEmoji.textContent = getEmojiDisplay(selectedCells[0].emoji);
                 paymentMessage.textContent = data.payment_message;
-                donateLink.href = 'https://www.donationalerts.com/r/your_channel';
+                donateLink.href = 'https://www.donationalerts.com/r/EmojiAdd';
                 paymentModal.style.display = 'grid';
                 paymentStatus.textContent = '⏳ Ожидание оплаты...';
                 pollPaymentStatus(orderNumber);
