@@ -270,6 +270,8 @@ def start_da_connection():
     time.sleep(2)
     connect_to_donationalerts()
 
+import os
 if __name__ == '__main__':
     threading.Thread(target=start_da_connection, daemon=True).start()
-    socketio_app.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get('PORT', 5000))  # Берёт PORT из окружения или 5000 по умолчанию
+    socketio_app.run(app, debug=True, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
