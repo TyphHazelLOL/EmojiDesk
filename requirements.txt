@@ -4,3 +4,4 @@ python-socketio
 requests
 eventlet
 gunicorn
+websocket-client
