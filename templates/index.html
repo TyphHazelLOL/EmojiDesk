@@ -62,8 +62,9 @@
         .buy-button { background:#28a745; color:#fff; border:none; font-weight:700; min-width:220px; cursor:pointer; }
         .buy-button[disabled] { background:#6c757d; cursor:not-allowed; }
         .promo-button { background:#ff6b35; color:#fff; border:none; font-weight:700; cursor:pointer; }
+        .free-button { background:#9c27b0; color:#fff; border:none; font-weight:700; cursor:pointer; }
         .payment-info { background:#e7f3ff; padding:12px; border-radius:8px; border:2px solid #b3d9ff; text-align:left; }
-        .promo-info { background:#fff3cd; padding:12px; border-radius:8px; border:2px solid #ffc107; margin:10px 0; }
+        .promo-info { background:#d4edda; padding:12px; border-radius:8px; border:2px solid #28a745; margin:10px 0; }
         .modal { position:fixed; inset:0; background:rgba(0,0,0,.66); display:none; place-items:center; z-index:1200; }
         .modal .box { background:#fff; padding:18px; border-radius:12px; max-width:460px; width:92%; position:relative; }
         .close { position:absolute; right:12px; top:8px; background:none; border:none; font-size:20px; cursor:pointer; }
@@ -80,7 +81,7 @@
             <p>1. Выбери эмодзи и нажимай на клетки чтобы выделить их</p>
             <p>2. Нажми "ОПЛАТИТЬ" и отправь точную сумму через DonationAlerts</p>
             <p>3. После оплаты твои эмодзи появятся на доске!</p>
-            <p><strong>🎁 Промокод: promocodena18rubley - 18 клеток за 1 рубль! (осталось <span id="promoUsesLeft">3</span> использований)</strong></p>
+            <p><strong>🎁 Промокод: promocodena18rubley - 18 клеток БЕСПЛАТНО! (осталось <span id="promoUsesLeft">3</span> использований)</strong></p>
         </div>
 
         <div class="stats" id="stats">
@@ -126,18 +127,20 @@
     <div id="paymentModal" class="modal">
         <div class="box">
             <button class="close" id="closeModal">×</button>
-            <h3>Оплата через DonationAlerts</h3>
+            <h3 id="modalTitle">Оплата через DonationAlerts</h3>
             <div class="payment-info">
                 <p><strong>Выбранные клетки:</strong> <span id="paymentCellCount">0</span> шт</p>
                 <p><strong>Эмодзи:</strong> <span id="paymentEmoji">😀</span></p>
-                <p><strong>Отправьте точную сумму:</strong> <span id="paymentAmount">0</span> руб</p>
-                <p><strong>В сообщении укажите:</strong> "<span id="paymentMessage">order_xxx</span>"</p>
+                <p id="amountLine"><strong>Отправьте точную сумму:</strong> <span id="paymentAmount">0</span> руб</p>
+                <p id="messageLine"><strong>В сообщении укажите:</strong> "<span id="paymentMessage">order_xxx</span>"</p>
                 <div id="promoAppliedInfo" class="promo-info" style="display:none;">
-                    <strong>🎁 Промокод активирован!</strong> Вы получаете <span id="promoDiscountCells">18</span> клеток за 1 рубль!
+                    <strong>🎁 Промокод активирован!</strong> Вы получаете <span id="promoDiscountCells">18</span> клеток <strong>БЕСПЛАТНО</strong>!
+                    <br>Просто нажмите "Активировать бесплатно" ниже.
                 </div>
-                <p>После оплаты дождитесь подтверждения (автоматически, до 1 минуты).</p>
+                <p id="waitingText">После оплаты дождитесь подтверждения (автоматически, до 1 минуты).</p>
             </div>
             <a id="donateLink" href="" target="_blank" class="buy-button" style="background:#ff5722; margin-top:10px; text-decoration:none; display:inline-block;">Перейти к оплате</a>
+            <button id="freeActivateButton" class="free-button" style="display:none; margin-top:10px; width:100%;">🎁 АКТИВИРОВАТЬ БЕСПЛАТНО</button>
             <div id="paymentStatus" style="margin-top:10px; background:#fff3cd; padding:8px; border-radius:8px;">⏳ Ожидание оплаты...</div>
         </div>
     </div>
@@ -169,6 +172,11 @@
         const promoAppliedInfo = document.getElementById('promoAppliedInfo');
         const promoDiscountCells = document.getElementById('promoDiscountCells');
         const promoUsesLeft = document.getElementById('promoUsesLeft');
+        const freeActivateButton = document.getElementById('freeActivateButton');
+        const modalTitle = document.getElementById('modalTitle');
+        const amountLine = document.getElementById('amountLine');
+        const messageLine = document.getElementById('messageLine');
+        const waitingText = document.getElementById('waitingText');
 
         function getEmojiImage(emojiType) {
             const emojiMap = {
@@ -222,7 +230,6 @@
 
         function updateSelectionInfo() {
             const total = selectedCells.length;
-            let price = total * PRICE_PER_CELL;
             
             // Если активен промокод, проверяем количество клеток
             if (activePromocode) {
@@ -233,23 +240,23 @@
                     buyButton.textContent = `НУЖНО ${requiredCells} КЛЕТОК`;
                     return;
                 }
-                price = 1.0; // Фиксированная цена для промокода
-            }
-
-            if (total === 0) {
-                selectedInfo.textContent = 'Нажимай на клетки чтобы выбрать их!';
-                buyButton.disabled = true;
-                buyButton.textContent = 'ВЫБРАТЬ КЛЕТКИ';
+                // 🎉 БЕСПЛАТНО!
+                selectedInfo.textContent = `🎁 Промокод активирован! ${total} клеток БЕСПЛАТНО!`;
+                buyButton.textContent = `ПОЛУЧИТЬ БЕСПЛАТНО`;
+                buyButton.disabled = false;
             } else {
-                const emoji = getEmojiDisplay(selectedCells[0].emoji);
-                if (activePromocode) {
-                    selectedInfo.textContent = `🎁 Промокод активирован! ${total} клеток за 1 рубль!`;
-                    buyButton.textContent = `ОПЛАТИТЬ 1 РУБЛЬ`;
+                // Обычная логика
+                const price = total * PRICE_PER_CELL;
+                if (total === 0) {
+                    selectedInfo.textContent = 'Нажимай на клетки чтобы выбрать их!';
+                    buyButton.disabled = true;
+                    buyButton.textContent = 'ВЫБРАТЬ КЛЕТКИ';
                 } else {
+                    const emoji = getEmojiDisplay(selectedCells[0].emoji);
                     selectedInfo.textContent = `Выбрано: ${total} клеток | Эмодзи: ${emoji} | Итого: ${price} руб`;
                     buyButton.textContent = `ОПЛАТИТЬ ${price} РУБ`;
+                    buyButton.disabled = false;
                 }
-                buyButton.disabled = false;
             }
         }
 
@@ -298,7 +305,7 @@
                 
                 if (data.valid) {
                     activePromocode = data;
-                    promoStatus.textContent = `✅ Промокод активирован! ${data.discount_cells} клеток за 1 рубль`;
+                    promoStatus.textContent = `✅ Промокод активирован! ${data.discount_cells} клеток БЕСПЛАТНО!`;
                     promoStatus.style.color = 'green';
                     promocodeInput.disabled = true;
                     applyPromoButton.disabled = true;
@@ -359,38 +366,90 @@
                 paymentMessage.textContent = data.payment_message;
                 donateLink.href = 'https://www.donationalerts.com/r/EmojiAdd';
                 
-                // Показываем информацию о промокоде
+                // Настройка модального окна для промокода
                 if (data.promocode_used) {
+                    // 🎉 БЕСПЛАТНЫЙ режим
+                    modalTitle.textContent = '🎁 Активация промокода';
                     promoAppliedInfo.style.display = 'block';
                     promoDiscountCells.textContent = data.promocode_discount;
+                    amountLine.style.display = 'none';
+                    messageLine.style.display = 'none';
+                    donateLink.style.display = 'none';
+                    freeActivateButton.style.display = 'block';
+                    waitingText.textContent = 'Нажмите "Активировать бесплатно" чтобы сразу получить клетки.';
+                    
+                    // Обработчик для бесплатной активации
+                    freeActivateButton.onclick = () => {
+                        activateFreeOrder(orderNumber);
+                    };
                 } else {
+                    // Обычный платный режим
+                    modalTitle.textContent = 'Оплата через DonationAlerts';
                     promoAppliedInfo.style.display = 'none';
+                    amountLine.style.display = 'block';
+                    messageLine.style.display = 'block';
+                    donateLink.style.display = 'inline-block';
+                    freeActivateButton.style.display = 'none';
+                    waitingText.textContent = 'После оплаты дождитесь подтверждения (автоматически, до 1 минуты).';
                 }
                 
                 paymentModal.style.display = 'grid';
-                paymentStatus.textContent = '⏳ Ожидание оплаты...';
-                pollPaymentStatus(orderNumber);
+                paymentStatus.textContent = data.promocode_used ? '⏳ Готово к активации...' : '⏳ Ожидание оплаты...';
+                
+                if (!data.promocode_used) {
+                    pollPaymentStatus(orderNumber);
+                }
             } catch (error) {
                 alert('Ошибка: ' + error.message);
             }
         });
 
+        // Активация бесплатного заказа
+        function activateFreeOrder(orderId) {
+            freeActivateButton.disabled = true;
+            freeActivateButton.textContent = '🎁 АКТИВИРУЕТСЯ...';
+            paymentStatus.textContent = '⏳ Активируем бесплатные клетки...';
+            
+            // Эмулируем "донат" с нулевой суммой для активации промокода
+            setTimeout(() => {
+                paymentStatus.textContent = '✅ Бесплатные клетки активированы!';
+                paymentStatus.style.background = '#d4edda';
+                
+                // Обновляем клетки на карте
+                selectedCells.forEach(cell => {
+                    const el = document.getElementById(`cell-${cell.x}-${cell.y}`);
+                    if (el) {
+                        el.classList.add('sold');
+                        el.classList.remove('selected');
+                        el.style.backgroundImage = `url('${getEmojiImage(cell.emoji)}')`;
+                    }
+                });
+                
+                updateStats(selectedCells.length);
+                selectedCells = [];
+                updateSelectionInfo();
+                
+                setTimeout(() => { 
+                    paymentModal.style.display = 'none';
+                    // Сбрасываем промокод после успешной активации
+                    if (activePromocode) {
+                        activePromocode = null;
+                        promocodeInput.value = '';
+                        promocodeInput.disabled = false;
+                        applyPromoButton.disabled = false;
+                        promoStatus.textContent = '';
+                        // Обновляем количество использований
+                        checkPromoUses();
+                    }
+                }, 1500);
+            }, 1000);
+        }
+
         document.getElementById('closeModal').addEventListener('click', () => {
             paymentModal.style.display = 'none';
-            // Сбрасываем промокод после покупки
-            if (activePromocode) {
-                activePromocode = null;
-                promocodeInput.value = '';
-                promocodeInput.disabled = false;
-                applyPromoButton.disabled = false;
-                promoStatus.textContent = '';
-                selectedCells = [];
-                updateSelectionVisuals();
-                updateSelectionInfo();
-            }
         });
 
-        // Проверка оплаты
+        // Проверка оплаты (только для обычных заказов)
         let pollInterval = null;
         function pollPaymentStatus(order) {
             if (pollInterval) clearInterval(pollInterval);
@@ -417,16 +476,6 @@
                         updateSelectionInfo();
                         setTimeout(() => { 
                             paymentModal.style.display = 'none';
-                            // Сбрасываем промокод после успешной оплаты
-                            if (activePromocode) {
-                                activePromocode = null;
-                                promocodeInput.value = '';
-                                promocodeInput.disabled = false;
-                                applyPromoButton.disabled = false;
-                                promoStatus.textContent = '';
-                                // Обновляем количество использований
-                                checkPromoUses();
-                            }
                         }, 1500);
                     } else if (data.status === 'rejected') {
                         paymentStatus.textContent = '❌ Недостаточно средств. Заказ отклонен.';
