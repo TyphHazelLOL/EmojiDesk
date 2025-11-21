@@ -329,6 +329,14 @@ def handle_disconnect():
 def start_da_connection():
     time.sleep(2)
     connect_to_donationalerts()
+    
+@app.route('/robots.txt')
+def robots():
+    return """User-agent: *
+Disallow: /admin
+Disallow: /api
+Allow: /
+""", 200, {'Content-Type': 'text/plain'}
 
 import os
 if __name__ == '__main__':
