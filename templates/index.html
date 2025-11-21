@@ -81,6 +81,7 @@
             <p>1. Выбери эмодзи и нажимай на клетки чтобы выделить их</p>
             <p>2. Нажми "ОПЛАТИТЬ" и отправь точную сумму через DonationAlerts</p>
             <p>3. После оплаты твои эмодзи появятся на доске!</p>
+            <p><strong>🎁 Есть промокод? Введи его ниже!</strong></p>
         </div>
 
         <div class="stats" id="stats">
@@ -105,7 +106,7 @@
                 <option value="star">⭐ Звезда</option>
             </select>
             <br>
-            <input type="text" id="promocodeInput" placeholder="Промокод" style="width: 200px;">
+            <input type="text" id="promocodeInput" placeholder="Введите промокод" style="width: 200px;">
             <button id="applyPromoButton" class="promo-button">ПРИМЕНИТЬ ПРОМОКОД</button>
             <span id="promoStatus"></span>
             <br>
@@ -170,7 +171,6 @@
         const promoStatus = document.getElementById('promoStatus');
         const promoAppliedInfo = document.getElementById('promoAppliedInfo');
         const promoDiscountCells = document.getElementById('promoDiscountCells');
-        const promoUsesLeft = document.getElementById('promoUsesLeft');
         const freeActivateButton = document.getElementById('freeActivateButton');
         const modalTitle = document.getElementById('modalTitle');
         const amountLine = document.getElementById('amountLine');
@@ -308,7 +308,6 @@
                     promoStatus.style.color = 'green';
                     promocodeInput.disabled = true;
                     applyPromoButton.disabled = true;
-                    promoUsesLeft.textContent = data.uses_left;
                     
                     // Сбрасываем выбор если количество не совпадает
                     if (selectedCells.length !== data.discount_cells) {
@@ -437,8 +436,6 @@
                         promocodeInput.disabled = false;
                         applyPromoButton.disabled = false;
                         promoStatus.textContent = '';
-                        // Обновляем количество использований
-                        checkPromoUses();
                     }
                 }, 1500);
             }, 1000);
@@ -507,19 +504,6 @@
             percentEl.textContent = percent + '%';
         }
 
-        // Проверка количества использований промокода
-        async function checkPromoUses() {
-            try {
-                const response = await fetch('/api/check_promocode/promocodena18rubley');
-                const data = await response.json();
-                if (data.valid) {
-                    promoUsesLeft.textContent = data.uses_left;
-                }
-            } catch (err) {
-                console.error('Ошибка проверки промокода:', err);
-            }
-        }
-
         // WebSocket
         function connectWebSocket() {
             socket = io();
@@ -565,7 +549,6 @@
             renderEmptyGrid();
             await loadExistingPixels();
             connectWebSocket();
-            checkPromoUses(); // Проверяем количество использований при загрузке
         }
 
         init();
