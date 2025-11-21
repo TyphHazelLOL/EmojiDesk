@@ -17,15 +17,6 @@ socketio_app = SocketIO(app, cors_allowed_origins="*")
 DA_TOKEN = "yD7udoHZME6u5RAb9QvN"  # замените на свой токен
 DA_SOCKET = None
 
-# === ПРОМОКОДЫ ===
-PROMOCODES = {
-    "promocodena18rubley": {
-        "uses_left": 3,
-        "discount_cells": 18,  # 18 бесплатных клеток
-        "max_uses": 3
-    }
-}
-
 # === БАЗА ДАННЫХ ===
 class Database:
     def __init__(self):
@@ -237,30 +228,22 @@ def process_donation_message(username, real_amount, order_id):
     cells_data = json.loads(order[2])
     promocode = order[5]  # promocode field
 
-    # Если использован промокод, проверяем минимальную сумму
+    # Если использован промокод, активируем сразу без проверки суммы
     if promocode:
         promocode_data = db.get_promocode(promocode)
         if promocode_data:
-            # Для промокода требуется минимальная сумма 1 рубль
-            min_amount = 1.0
-            if real_amount >= min_amount:
-                # ✅ Промокод активирован - ставим смайлы
-                for cell in cells_data:
-                    db.set_pixel(cell['x'], cell['y'], cell['emoji'], username, order_id)
-                    socketio_app.emit('pixel_update', {
-                        'x': cell['x'],
-                        'y': cell['y'],
-                        'emoji': cell['emoji'],
-                        'username': username
-                    })
-                db.update_order_status(order_id, 'confirmed')
-                print(f"✅ Order {order_id} confirmed with promocode {promocode} for {username}")
-                return True
-            else:
-                # ❌ Недостаточно средств для активации промокода
-                db.update_order_status(order_id, 'rejected')
-                print(f"❌ Order {order_id} rejected - insufficient funds for promocode ({real_amount}₽ < {min_amount}₽)")
-                return False
+            # ✅ Промокод активирован - ставим смайлы БЕЗ ПРОВЕРКИ СУММЫ
+            for cell in cells_data:
+                db.set_pixel(cell['x'], cell['y'], cell['emoji'], username, order_id)
+                socketio_app.emit('pixel_update', {
+                    'x': cell['x'],
+                    'y': cell['y'],
+                    'emoji': cell['emoji'],
+                    'username': username
+                })
+            db.update_order_status(order_id, 'confirmed')
+            print(f"✅ Order {order_id} confirmed with promocode {promocode} for {username} - FREE")
+            return True
     else:
         # Обычная логика без промокода
         if real_amount >= order_amount:
@@ -317,9 +300,9 @@ def buy_cells():
             if len(cells) != promocode_data['discount_cells']:
                 return jsonify({'error': f'This promocode requires exactly {promocode_data["discount_cells"]} cells'}), 400
 
-        # Рассчитываем сумму
+        # Рассчитываем сумму - для промокода БЕСПЛАТНО
         if promocode_data:
-            amount = 1.0  # Фиксированная минимальная сумма для активации промокода
+            amount = 0.0  # 🎉 БЕСПЛАТНО!
         else:
             amount = len(cells) * 1.0  # 1 рубль за клетку
 
