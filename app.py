@@ -218,7 +218,7 @@ def connect_to_donationalerts():
 
 
 # === ОБРАБОТКА ДОНОВ ===
-def process_donation_message(username, real_amount, order_id):
+    def process_donation_message(username, real_amount, order_id):
     order = db.get_order(order_id)
     if not order:
         print(f"❌ Order {order_id} not found")
