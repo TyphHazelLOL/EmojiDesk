@@ -11,10 +11,10 @@ import socketio as client_socketio
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'IloveHazelandAngelPlushie'
-socketio_app = SocketIO(app, cors_allowed_origins="*")
+socketio_app = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # === НАСТРОЙКИ DONATIONALERTS ===
-DA_TOKEN = "yD7udoHZME6u5RAb9QvN"  # замените на свой токен
+DA_TOKEN = "yD7udoHZME6u5RAb9QvN"
 DA_SOCKET = None
 
 # === БАЗА ДАННЫХ ===
@@ -23,10 +23,9 @@ class Database:
         self.init_db()
 
     def init_db(self):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
 
-        # Таблица пикселей
         c.execute('''CREATE TABLE IF NOT EXISTS pixels
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
                      x INTEGER NOT NULL,
@@ -36,7 +35,6 @@ class Database:
                      order_id TEXT,
                      purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-        # Таблица заказов
         c.execute('''CREATE TABLE IF NOT EXISTS orders
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
                      order_id TEXT UNIQUE NOT NULL,
@@ -46,7 +44,6 @@ class Database:
                      promocode TEXT,
                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-        # Таблица для кэша донатов
         c.execute('''CREATE TABLE IF NOT EXISTS donations_cache
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
                      username TEXT NOT NULL,
@@ -56,7 +53,6 @@ class Database:
                      processed BOOLEAN DEFAULT FALSE,
                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-        # Таблица промокодов
         c.execute('''CREATE TABLE IF NOT EXISTS promocodes
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
                      code TEXT UNIQUE NOT NULL,
@@ -65,7 +61,6 @@ class Database:
                      discount_cells INTEGER NOT NULL,
                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-        # Инициализируем промокод если его нет
         c.execute('SELECT * FROM promocodes WHERE code = ?', ('promocodena18rubley',))
         if not c.fetchone():
             c.execute('INSERT INTO promocodes (code, uses_left, max_uses, discount_cells) VALUES (?, ?, ?, ?)',
@@ -75,7 +70,7 @@ class Database:
         conn.close()
 
     def get_pixel(self, x, y):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('SELECT * FROM pixels WHERE x = ? AND y = ?', (x, y))
         pixel = c.fetchone()
@@ -83,7 +78,7 @@ class Database:
         return pixel
 
     def set_pixel(self, x, y, emoji, username, order_id=None):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         existing = self.get_pixel(x, y)
         if existing:
@@ -94,9 +89,17 @@ class Database:
                      (x, y, emoji, username, order_id))
         conn.commit()
         conn.close()
+        
+        # Отправляем событие всем клиентам
+        socketio_app.emit('pixel_update', {
+            'x': x,
+            'y': y,
+            'emoji': emoji,
+            'username': username
+        }, broadcast=True)
 
     def get_all_pixels(self):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('SELECT x, y, emoji, username FROM pixels')
         pixels = c.fetchall()
@@ -105,7 +108,7 @@ class Database:
 
     def create_order(self, cells_data, amount, promocode=None):
         order_id = str(uuid.uuid4())[:8]
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('INSERT INTO orders (order_id, cells_data, amount, promocode) VALUES (?, ?, ?, ?)',
                  (order_id, json.dumps(cells_data), amount, promocode))
@@ -114,7 +117,7 @@ class Database:
         return order_id
 
     def get_order(self, order_id):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('SELECT * FROM orders WHERE order_id = ?', (order_id,))
         order = c.fetchone()
@@ -122,14 +125,14 @@ class Database:
         return order
 
     def update_order_status(self, order_id, status):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('UPDATE orders SET status = ? WHERE order_id = ?', (status, order_id))
         conn.commit()
         conn.close()
 
     def cache_donation(self, username, message, amount, order_id=None):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('INSERT INTO donations_cache (username, message, amount, order_id) VALUES (?, ?, ?, ?)',
                  (username, message, amount, order_id))
@@ -137,7 +140,7 @@ class Database:
         conn.close()
 
     def get_promocode(self, code):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('SELECT * FROM promocodes WHERE code = ?', (code,))
         promocode = c.fetchone()
@@ -152,7 +155,7 @@ class Database:
         return None
 
     def use_promocode(self, code):
-        conn = sqlite3.connect('pixels.db')
+        conn = sqlite3.connect('pixels.db', check_same_thread=False)
         c = conn.cursor()
         c.execute('SELECT uses_left FROM promocodes WHERE code = ?', (code,))
         result = c.fetchone()
@@ -163,7 +166,6 @@ class Database:
             return True
         conn.close()
         return False
-
 
 db = Database()
 
@@ -188,7 +190,6 @@ def connect_to_donationalerts():
 
             print(f"💸 Donation from {username}: {amount} - {message}")
 
-            # Ищем order_id
             m = re.search(r'order[_\s-]?([a-z0-9]+)', message.lower())
             order_id = m.group(1) if m else None
 
@@ -196,10 +197,7 @@ def connect_to_donationalerts():
                 print("⚠️ Order ID not found in message.")
                 return
 
-            # Сохраняем в кэш
             db.cache_donation(username, message, amount, order_id)
-
-            # Обрабатываем заказ
             process_donation_message(username, amount, order_id)
 
         except Exception as e:
@@ -216,7 +214,6 @@ def connect_to_donationalerts():
     except Exception as e:
         print(f"[DA] Connection failed: {e}")
 
-
 # === ОБРАБОТКА ДОНОВ ===
 def process_donation_message(username, real_amount, order_id):
     order = db.get_order(order_id)
@@ -226,45 +223,27 @@ def process_donation_message(username, real_amount, order_id):
 
     order_amount = float(order[3])
     cells_data = json.loads(order[2])
-    promocode = order[5]  # promocode field
+    promocode = order[5]
 
-    # Если использован промокод, активируем сразу без проверки суммы
     if promocode:
         promocode_data = db.get_promocode(promocode)
         if promocode_data:
-            # ✅ Промокод активирован - ставим смайлы БЕЗ ПРОВЕРКИ СУММЫ
             for cell in cells_data:
                 db.set_pixel(cell['x'], cell['y'], cell['emoji'], username, order_id)
-                socketio_app.emit('pixel_update', {
-                    'x': cell['x'],
-                    'y': cell['y'],
-                    'emoji': cell['emoji'],
-                    'username': username
-                })
             db.update_order_status(order_id, 'confirmed')
             print(f"✅ Order {order_id} confirmed with promocode {promocode} for {username} - FREE")
             return True
     else:
-        # Обычная логика без промокода
         if real_amount >= order_amount:
-            # 💰 Достаточно — ставим смайлы
             for cell in cells_data:
                 db.set_pixel(cell['x'], cell['y'], cell['emoji'], username, order_id)
-                socketio_app.emit('pixel_update', {
-                    'x': cell['x'],
-                    'y': cell['y'],
-                    'emoji': cell['emoji'],
-                    'username': username
-                })
             db.update_order_status(order_id, 'confirmed')
             print(f"✅ Order {order_id} confirmed for {username} ({real_amount}₽ >= {order_amount}₽)")
             return True
         else:
-            # 💸 Недостаточно — отклоняем
             db.update_order_status(order_id, 'rejected')
             print(f"❌ Order {order_id} rejected ({real_amount}₽ < {order_amount}₽)")
             return False
-
 
 # === FLASK API ===
 @app.route('/')
@@ -273,7 +252,9 @@ def index():
 
 @app.route('/api/pixels')
 def get_pixels():
-    return jsonify(db.get_all_pixels())
+    pixels = db.get_all_pixels()
+    print(f"📊 Sending {len(pixels)} pixels to client")
+    return jsonify(pixels)
 
 @app.route('/api/buy_cells', methods=['POST'])
 def buy_cells():
@@ -281,15 +262,14 @@ def buy_cells():
         data = request.json
         cells = data.get('cells', [])
         promocode = data.get('promocode', '').strip()
+        
         if not cells:
             return jsonify({'error': 'No cells selected'}), 400
 
-        # Проверяем, не заняты ли клетки
         for cell in cells:
             if db.get_pixel(cell['x'], cell['y']):
                 return jsonify({'error': f'Cell ({cell["x"]},{cell["y"]}) already taken'}), 400
 
-        # Проверяем промокод
         promocode_data = None
         if promocode:
             promocode_data = db.get_promocode(promocode)
@@ -300,16 +280,14 @@ def buy_cells():
             if len(cells) != promocode_data['discount_cells']:
                 return jsonify({'error': f'This promocode requires exactly {promocode_data["discount_cells"]} cells'}), 400
 
-        # Рассчитываем сумму - для промокода БЕСПЛАТНО
         if promocode_data:
-            amount = 0.0  # 🎉 БЕСПЛАТНО!
+            amount = 0.0
         else:
-            amount = len(cells) * 1.0  # 1 рубль за клетку
+            amount = len(cells) * 1.0
 
         order_id = db.create_order(cells, amount, promocode if promocode_data else None)
         payment_message = f"order_{order_id}"
 
-        # Используем промокод если он валидный
         if promocode_data:
             db.use_promocode(promocode)
 
@@ -357,16 +335,17 @@ def check_payment(order_id):
         'promocode_used': bool(promocode)
     })
 
-
 # === SOCKET.IO ===
 @socketio_app.on('connect')
 def handle_connect():
     print('🟢 Client connected')
+    # При подключении отправляем все пиксели
+    pixels = db.get_all_pixels()
+    socketio_app.emit('initial_pixels', {'pixels': pixels})
 
 @socketio_app.on('disconnect')
 def handle_disconnect():
     print('🔴 Client disconnected')
-
 
 # === ЗАПУСК ===
 def start_da_connection():
