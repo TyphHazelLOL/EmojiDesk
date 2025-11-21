@@ -162,7 +162,6 @@
             return displayMap[emojiType] || '😀';
         }
 
-        // Инициализация сетки
         function renderEmptyGrid() {
             grid.innerHTML = '';
             grid.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 16px)`;
@@ -244,7 +243,6 @@
             updateSelectionVisuals();
         }
 
-        // Обработчик применения промокода
         applyPromoButton.addEventListener('click', async () => {
             const code = promocodeInput.value.trim();
             if (!code) {
@@ -341,7 +339,6 @@
             }
         });
 
-        // Активация бесплатного заказа
         function activateFreeOrder(orderId) {
             freeActivateButton.disabled = true;
             freeActivateButton.textContent = '🎁 АКТИВИРУЕТСЯ...';
@@ -381,7 +378,6 @@
             paymentModal.style.display = 'none';
         });
 
-        // Проверка оплаты
         let pollInterval = null;
         function pollPaymentStatus(order) {
             if (pollInterval) clearInterval(pollInterval);
@@ -440,41 +436,40 @@
             percentEl.textContent = percent + '%';
         }
 
-        // WebSocket для реального времени
         function connectWebSocket() {
             socket = io();
             
             socket.on('connect', () => {
-                console.log('✅ Connected to WebSocket');
+                loadExistingPixels();
             });
             
             socket.on('initial_pixels', (data) => {
-                console.log('📦 Received initial pixels:', data.pixels.length);
                 loadPixelsToGrid(data.pixels);
             });
             
             socket.on('pixel_update', (data) => {
-                console.log('🔄 Pixel update:', data);
                 updatePixelOnGrid(data.x, data.y, data.emoji);
-            });
-            
-            socket.on('disconnect', () => {
-                console.log('❌ Disconnected from WebSocket');
             });
         }
 
         function loadPixelsToGrid(pixels) {
             let soldCount = 0;
+            
+            document.querySelectorAll('.cell.sold').forEach(cell => {
+                cell.classList.remove('sold');
+                cell.style.backgroundImage = '';
+            });
+            
             pixels.forEach(pixel => {
                 const el = document.getElementById(`cell-${pixel.x}-${pixel.y}`);
-                if (el && !el.classList.contains('sold')) {
+                if (el) {
                     el.classList.add('sold');
                     el.style.backgroundImage = `url('${getEmojiImage(pixel.emoji)}')`;
                     soldCount++;
                 }
             });
+            
             updateStats(soldCount);
-            console.log(`✅ Loaded ${pixels.length} pixels to grid`);
         }
 
         function updatePixelOnGrid(x, y, emoji) {
@@ -486,38 +481,34 @@
             }
         }
 
-        // Загрузка существующих пикселей
         async function loadExistingPixels() {
             try {
-                console.log('🔄 Loading existing pixels from API...');
                 const response = await fetch('/api/pixels');
                 if (!response.ok) throw new Error('Failed to fetch pixels');
-                
                 const pixels = await response.json();
-                console.log(`✅ Loaded ${pixels.length} pixels from API`);
                 loadPixelsToGrid(pixels);
             } catch (err) {
-                console.error('❌ Error loading pixels:', err);
-                setTimeout(loadExistingPixels, 3000);
+                setTimeout(loadExistingPixels, 2000);
             }
         }
 
         async function init() {
-            console.log('🚀 Initializing application...');
-            
             renderEmptyGrid();
-            console.log('✅ Grid rendered');
-            
-            connectWebSocket();
-            console.log('✅ WebSocket connecting...');
-            
-            // Загружаем пиксели и через API и через WebSocket для надежности
             await loadExistingPixels();
-            
-            console.log('✅ Initialization complete');
+            connectWebSocket();
         }
 
         document.addEventListener('DOMContentLoaded', init);
+        
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                loadExistingPixels();
+            }
+        });
+
+        window.addEventListener('focus', function() {
+            loadExistingPixels();
+        });
     </script>
 </body>
 </html>
