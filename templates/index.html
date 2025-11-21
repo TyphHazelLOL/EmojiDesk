@@ -150,12 +150,12 @@
         const GRID_SIZE = 96;
         const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
         const PRICE_PER_CELL = 1;
-
+    
         let selectedCells = [];
         let orderNumber = null;
         let socket = null;
         let activePromocode = null;
-
+    
         const grid = document.getElementById('grid');
         const buyButton = document.getElementById('buyButton');
         const selectedInfo = document.getElementById('selectedInfo');
@@ -176,7 +176,7 @@
         const amountLine = document.getElementById('amountLine');
         const messageLine = document.getElementById('messageLine');
         const waitingText = document.getElementById('waitingText');
-
+    
         function getEmojiImage(emojiType) {
             const emojiMap = {
                 'smile': '/static/images/smile.png',
@@ -192,7 +192,7 @@
             };
             return emojiMap[emojiType] || '/static/images/smile.png';
         }
-
+    
         function getEmojiDisplay(emojiType) {
             const displayMap = {
                 'smile': '😀', 'cool': '😎', 'clown': '🤡', 'skull': '💀',
@@ -201,7 +201,7 @@
             };
             return displayMap[emojiType] || '😀';
         }
-
+    
         // Инициализация сетки
         function renderEmptyGrid() {
             grid.innerHTML = '';
@@ -218,7 +218,7 @@
                 }
             }
         }
-
+    
         function updateSelectionVisuals() {
             document.querySelectorAll('.cell.selected').forEach(el => el.classList.remove('selected'));
             selectedCells.forEach(cell => {
@@ -226,7 +226,7 @@
                 if (el && !el.classList.contains('sold')) el.classList.add('selected');
             });
         }
-
+    
         function updateSelectionInfo() {
             const total = selectedCells.length;
             
@@ -258,7 +258,7 @@
                 }
             }
         }
-
+    
         function onCellClick(x, y) {
             const el = document.getElementById(`cell-${x}-${y}`);
             if (!el || el.classList.contains('sold')) return;
@@ -288,7 +288,7 @@
             updateSelectionInfo();
             updateSelectionVisuals();
         }
-
+    
         // Обработчик применения промокода
         applyPromoButton.addEventListener('click', async () => {
             const code = promocodeInput.value.trim();
@@ -297,7 +297,7 @@
                 promoStatus.style.color = 'red';
                 return;
             }
-
+    
             try {
                 const response = await fetch(`/api/check_promocode/${code}`);
                 const data = await response.json();
@@ -325,7 +325,7 @@
                 promoStatus.style.color = 'red';
             }
         });
-
+    
         // Сброс промокода при изменении количества клеток (для обычного режима)
         document.getElementById('emojiSelector').addEventListener('change', () => {
             if (!activePromocode) {
@@ -335,7 +335,7 @@
                 updateSelectionVisuals();
             }
         });
-
+    
         buyButton.addEventListener('click', async () => {
             if (selectedCells.length === 0) return alert('Выберите клетки для покупки');
             
@@ -344,7 +344,7 @@
                 alert(`Для этого промокода нужно выбрать ровно ${activePromocode.discount_cells} клеток`);
                 return;
             }
-
+    
             try {
                 const response = await fetch('/api/buy_cells', {
                     method: 'POST',
@@ -401,7 +401,7 @@
                 alert('Ошибка: ' + error.message);
             }
         });
-
+    
         // Активация бесплатного заказа
         function activateFreeOrder(orderId) {
             freeActivateButton.disabled = true;
@@ -427,6 +427,18 @@
                 selectedCells = [];
                 updateSelectionInfo();
                 
+                // Отправляем событие через WebSocket чтобы обновить у всех пользователей
+                if (socket) {
+                    selectedCells.forEach(cell => {
+                        socket.emit('pixel_update', {
+                            x: cell.x,
+                            y: cell.y,
+                            emoji: cell.emoji,
+                            username: 'Промокод'
+                        });
+                    });
+                }
+                
                 setTimeout(() => { 
                     paymentModal.style.display = 'none';
                     // Сбрасываем промокод после успешной активации
@@ -440,11 +452,11 @@
                 }, 1500);
             }, 1000);
         }
-
+    
         document.getElementById('closeModal').addEventListener('click', () => {
             paymentModal.style.display = 'none';
         });
-
+    
         // Проверка оплаты (только для обычных заказов)
         let pollInterval = null;
         function pollPaymentStatus(order) {
@@ -490,25 +502,31 @@
                 }
             }, 5000);
         }
-
+    
         function updateStats(added = 0) {
             const soldEl = document.getElementById('soldCells');
             const freeEl = document.getElementById('freeCells');
             const percentEl = document.getElementById('completionPercent');
-
+    
             const soldNow = parseInt(soldEl.textContent || '0', 10) + added;
             soldEl.textContent = soldNow;
             freeEl.textContent = TOTAL_CELLS - soldNow;
-
+    
             const percent = ((soldNow / TOTAL_CELLS) * 100).toFixed(2);
             percentEl.textContent = percent + '%';
         }
-
-        // WebSocket
+    
+        // WebSocket для реального времени
         function connectWebSocket() {
             socket = io();
-            socket.on('connect', () => console.log('Connected'));
+            socket.on('connect', () => {
+                console.log('Connected to WebSocket');
+                // При подключении запрашиваем актуальное состояние
+                loadExistingPixels();
+            });
+            
             socket.on('pixel_update', (data) => {
+                console.log('Pixel update received:', data);
                 const el = document.getElementById(`cell-${data.x}-${data.y}`);
                 if (el && !el.classList.contains('sold')) {
                     el.classList.add('sold');
@@ -516,42 +534,69 @@
                     updateStats(1);
                 }
             });
-            socket.on('disconnect', () => console.log('Disconnected'));
+            
+            socket.on('disconnect', () => console.log('Disconnected from WebSocket'));
         }
-
+    
+        // Загрузка существующих пикселей
         async function loadExistingPixels() {
             try {
+                console.log('Loading existing pixels...');
                 const response = await fetch('/api/pixels');
+                if (!response.ok) throw new Error('Failed to fetch pixels');
+                
                 const pixels = await response.json();
-
+                console.log(`Loaded ${pixels.length} pixels`);
+    
+                let soldCount = 0;
+                
                 pixels.forEach(pixel => {
                     const el = document.getElementById(`cell-${pixel.x}-${pixel.y}`);
-                    if (el && pixel.emoji) {
-                        el.classList.add('sold');
-                        el.style.backgroundImage = `url('${getEmojiImage(pixel.emoji)}')`;
+                    if (el) {
+                        // Проверяем, не занята ли уже клетка (на случай дублирования)
+                        if (!el.classList.contains('sold')) {
+                            el.classList.add('sold');
+                            el.style.backgroundImage = `url('${getEmojiImage(pixel.emoji)}')`;
+                            soldCount++;
+                        }
                     }
                 });
-
-                const soldCount = pixels.length;
+    
+                // Обновляем статистику
                 const freeCount = TOTAL_CELLS - soldCount;
                 const percent = ((soldCount / TOTAL_CELLS) * 100).toFixed(2);
-
+    
                 document.getElementById('soldCells').textContent = soldCount;
                 document.getElementById('freeCells').textContent = freeCount;
                 document.getElementById('completionPercent').textContent = percent + '%';
-
+    
+                console.log(`Stats updated: ${soldCount} sold, ${freeCount} free, ${percent}%`);
+    
             } catch (err) {
                 console.error('Ошибка при загрузке пикселей:', err);
+                // Пробуем снова через 3 секунды
+                setTimeout(loadExistingPixels, 3000);
             }
         }
-
+    
         async function init() {
+            console.log('Initializing application...');
+            
+            // Сначала рендерим пустую сетку
             renderEmptyGrid();
-            await loadExistingPixels();
+            console.log('Grid rendered');
+            
+            // Затем подключаем WebSocket
             connectWebSocket();
+            console.log('WebSocket connecting...');
+            
+            // И загружаем существующие пиксели
+            await loadExistingPixels();
+            console.log('Initialization complete');
         }
-
-        init();
+    
+        // Запускаем инициализацию когда страница загружена
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
