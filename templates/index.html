@@ -6,54 +6,14 @@
     <title>EmojiDesk — Купи свою клетку</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: #f6f6f6;
-            margin: 0;
-            padding: 20px;
-        }
-        .wrap {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #fff;
-            border-radius: 14px;
-            padding: 20px;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-        #gridContainer {
-            overflow: auto;
-            max-height: 700px;
-            margin-top: 20px;
-            padding: 10px;
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
-            background: #fff;
-        }
-        #grid {
-            display: grid;
-            grid-template-columns: repeat(96, 16px);
-            grid-auto-rows: 16px;
-            gap: 1px;
-            justify-content: center;
-        }
-        .cell {
-            width: 16px;
-            height: 16px;
-            border: 1px solid #eaeaea;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.2s, border 0.2s;
-            background-size: cover;
-            background-position: center;
-        }
+        body { font-family: Arial, sans-serif; text-align: center; background: #f6f6f6; margin: 0; padding: 20px; }
+        .wrap { max-width: 1200px; margin: 0 auto; background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        #gridContainer { overflow: auto; max-height: 700px; margin-top: 20px; padding: 10px; border: 2px solid #e9ecef; border-radius: 10px; background: #fff; }
+        #grid { display: grid; grid-template-columns: repeat(96, 16px); grid-auto-rows: 16px; gap: 1px; justify-content: center; }
+        .cell { width: 16px; height: 16px; border: 1px solid #eaeaea; font-size: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: background 0.2s, border 0.2s; background-size: cover; background-position: center; }
         .cell:hover { background: #f0f0f0; }
         .cell.selected { background: #cce5ff !important; border: 2px solid #007bff !important; }
-        .cell.sold { cursor: not-allowed; }
+        .cell.sold { cursor: not-allowed; background-color: #f8f9fa; }
         .stats { display:flex; gap:12px; margin:18px 0; flex-wrap:wrap; justify-content:center; }
         .stat { background:#f8f9fa; padding:12px 16px; border-radius:10px; border-left:4px solid #007bff; min-width:120px; text-align:center; }
         .stat .num { font-weight:700; font-size:18px; color:#007bff; }
@@ -230,7 +190,6 @@
         function updateSelectionInfo() {
             const total = selectedCells.length;
             
-            // Если активен промокод, проверяем количество клеток
             if (activePromocode) {
                 const requiredCells = activePromocode.discount_cells;
                 if (total !== requiredCells) {
@@ -239,12 +198,10 @@
                     buyButton.textContent = `НУЖНО ${requiredCells} КЛЕТОК`;
                     return;
                 }
-                // 🎉 БЕСПЛАТНО!
                 selectedInfo.textContent = `🎁 Промокод активирован! ${total} клеток БЕСПЛАТНО!`;
                 buyButton.textContent = `ПОЛУЧИТЬ БЕСПЛАТНО`;
                 buyButton.disabled = false;
             } else {
-                // Обычная логика
                 const price = total * PRICE_PER_CELL;
                 if (total === 0) {
                     selectedInfo.textContent = 'Нажимай на клетки чтобы выбрать их!';
@@ -264,7 +221,6 @@
             if (!el || el.classList.contains('sold')) return;
             const emoji = document.getElementById('emojiSelector').value;
             
-            // Если активен промокод, ограничиваем выбор
             if (activePromocode) {
                 const maxCells = activePromocode.discount_cells;
                 const foundIndex = selectedCells.findIndex(c => c.x === x && c.y === y);
@@ -279,7 +235,6 @@
                     selectedCells.splice(foundIndex, 1);
                 }
             } else {
-                // Обычный выбор без промокода
                 const foundIndex = selectedCells.findIndex(c => c.x === x && c.y === y);
                 if (foundIndex === -1) selectedCells.push({ x, y, emoji });
                 else selectedCells.splice(foundIndex, 1);
@@ -309,7 +264,6 @@
                     promocodeInput.disabled = true;
                     applyPromoButton.disabled = true;
                     
-                    // Сбрасываем выбор если количество не совпадает
                     if (selectedCells.length !== data.discount_cells) {
                         selectedCells = [];
                         updateSelectionVisuals();
@@ -329,7 +283,6 @@
         buyButton.addEventListener('click', async () => {
             if (selectedCells.length === 0) return alert('Выберите клетки для покупки');
             
-            // Дополнительная проверка для промокода
             if (activePromocode && selectedCells.length !== activePromocode.discount_cells) {
                 alert(`Для этого промокода нужно выбрать ровно ${activePromocode.discount_cells} клеток`);
                 return;
@@ -354,9 +307,7 @@
                 paymentMessage.textContent = data.payment_message;
                 donateLink.href = 'https://www.donationalerts.com/r/EmojiAdd';
                 
-                // Настройка модального окна для промокода
                 if (data.promocode_used) {
-                    // 🎉 БЕСПЛАТНЫЙ режим
                     modalTitle.textContent = '🎁 Активация промокода';
                     promoAppliedInfo.style.display = 'block';
                     promoDiscountCells.textContent = data.promocode_discount;
@@ -366,12 +317,10 @@
                     freeActivateButton.style.display = 'block';
                     waitingText.textContent = 'Нажмите "Активировать бесплатно" чтобы сразу получить клетки.';
                     
-                    // Обработчик для бесплатной активации
                     freeActivateButton.onclick = () => {
                         activateFreeOrder(orderNumber);
                     };
                 } else {
-                    // Обычный платный режим
                     modalTitle.textContent = 'Оплата через DonationAlerts';
                     promoAppliedInfo.style.display = 'none';
                     amountLine.style.display = 'block';
@@ -402,7 +351,6 @@
                 paymentStatus.textContent = '✅ Бесплатные клетки активированы!';
                 paymentStatus.style.background = '#d4edda';
                 
-                // Обновляем клетки на карте
                 selectedCells.forEach(cell => {
                     const el = document.getElementById(`cell-${cell.x}-${cell.y}`);
                     if (el) {
@@ -418,7 +366,6 @@
                 
                 setTimeout(() => { 
                     paymentModal.style.display = 'none';
-                    // Сбрасываем промокод после успешной активации
                     if (activePromocode) {
                         activePromocode = null;
                         promocodeInput.value = '';
@@ -434,7 +381,7 @@
             paymentModal.style.display = 'none';
         });
 
-        // Проверка оплаты (только для обычных заказов)
+        // Проверка оплаты
         let pollInterval = null;
         function pollPaymentStatus(order) {
             if (pollInterval) clearInterval(pollInterval);
@@ -496,79 +443,80 @@
         // WebSocket для реального времени
         function connectWebSocket() {
             socket = io();
+            
             socket.on('connect', () => {
-                console.log('Connected to WebSocket');
-                // При подключении запрашиваем актуальное состояние
-                loadExistingPixels();
+                console.log('✅ Connected to WebSocket');
+            });
+            
+            socket.on('initial_pixels', (data) => {
+                console.log('📦 Received initial pixels:', data.pixels.length);
+                loadPixelsToGrid(data.pixels);
             });
             
             socket.on('pixel_update', (data) => {
-                console.log('Pixel update received:', data);
-                const el = document.getElementById(`cell-${data.x}-${data.y}`);
-                if (el && !el.classList.contains('sold')) {
-                    el.classList.add('sold');
-                    el.style.backgroundImage = `url('${getEmojiImage(data.emoji)}')`;
-                    updateStats(1);
-                }
+                console.log('🔄 Pixel update:', data);
+                updatePixelOnGrid(data.x, data.y, data.emoji);
             });
             
-            socket.on('disconnect', () => console.log('Disconnected from WebSocket'));
+            socket.on('disconnect', () => {
+                console.log('❌ Disconnected from WebSocket');
+            });
+        }
+
+        function loadPixelsToGrid(pixels) {
+            let soldCount = 0;
+            pixels.forEach(pixel => {
+                const el = document.getElementById(`cell-${pixel.x}-${pixel.y}`);
+                if (el && !el.classList.contains('sold')) {
+                    el.classList.add('sold');
+                    el.style.backgroundImage = `url('${getEmojiImage(pixel.emoji)}')`;
+                    soldCount++;
+                }
+            });
+            updateStats(soldCount);
+            console.log(`✅ Loaded ${pixels.length} pixels to grid`);
+        }
+
+        function updatePixelOnGrid(x, y, emoji) {
+            const el = document.getElementById(`cell-${x}-${y}`);
+            if (el && !el.classList.contains('sold')) {
+                el.classList.add('sold');
+                el.style.backgroundImage = `url('${getEmojiImage(emoji)}')`;
+                updateStats(1);
+            }
         }
 
         // Загрузка существующих пикселей
         async function loadExistingPixels() {
             try {
-                console.log('Loading existing pixels...');
+                console.log('🔄 Loading existing pixels from API...');
                 const response = await fetch('/api/pixels');
                 if (!response.ok) throw new Error('Failed to fetch pixels');
                 
                 const pixels = await response.json();
-                console.log(`Loaded ${pixels.length} pixels`);
-
-                let soldCount = 0;
-                
-                pixels.forEach(pixel => {
-                    const el = document.getElementById(`cell-${pixel.x}-${pixel.y}`);
-                    if (el) {
-                        if (!el.classList.contains('sold')) {
-                            el.classList.add('sold');
-                            el.style.backgroundImage = `url('${getEmojiImage(pixel.emoji)}')`;
-                            soldCount++;
-                        }
-                    }
-                });
-
-                // Обновляем статистику
-                const freeCount = TOTAL_CELLS - soldCount;
-                const percent = ((soldCount / TOTAL_CELLS) * 100).toFixed(2);
-
-                document.getElementById('soldCells').textContent = soldCount;
-                document.getElementById('freeCells').textContent = freeCount;
-                document.getElementById('completionPercent').textContent = percent + '%';
-
-                console.log(`Stats updated: ${soldCount} sold, ${freeCount} free, ${percent}%`);
-
+                console.log(`✅ Loaded ${pixels.length} pixels from API`);
+                loadPixelsToGrid(pixels);
             } catch (err) {
-                console.error('Ошибка при загрузке пикселей:', err);
+                console.error('❌ Error loading pixels:', err);
                 setTimeout(loadExistingPixels, 3000);
             }
         }
 
         async function init() {
-            console.log('Initializing application...');
+            console.log('🚀 Initializing application...');
             
-            // Сначала рендерим пустую сетку
             renderEmptyGrid();
-            console.log('Grid rendered');
+            console.log('✅ Grid rendered');
             
-            // Затем подключаем WebSocket
             connectWebSocket();
-            console.log('WebSocket connecting...');
+            console.log('✅ WebSocket connecting...');
             
-            console.log('Initialization complete');
+            // Загружаем пиксели и через API и через WebSocket для надежности
+            await loadExistingPixels();
+            
+            console.log('✅ Initialization complete');
         }
 
-        // Запускаем инициализацию когда страница загружена
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
