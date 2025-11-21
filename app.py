@@ -17,14 +17,18 @@ socketio_app = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 DA_TOKEN = "yD7udoHZME6u5RAb9QvN"
 DA_SOCKET = None
 
-# === БАЗА ДАННЫХ ===
+# === IN-MEMORY БАЗА ДАННЫХ ===
 class Database:
     def __init__(self):
+        self.conn = sqlite3.connect(':memory:', check_same_thread=False)
         self.init_db()
+        # Кэш для хранения данных
+        self.pixels_cache = []
+        self.orders_cache = {}
+        self.promocodes_cache = {'promocodena18rubley': {'uses_left': 3, 'max_uses': 3, 'discount_cells': 18}}
 
     def init_db(self):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
 
         c.execute('''CREATE TABLE IF NOT EXISTS pixels
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,15 +48,6 @@ class Database:
                      promocode TEXT,
                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-        c.execute('''CREATE TABLE IF NOT EXISTS donations_cache
-                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     username TEXT NOT NULL,
-                     message TEXT,
-                     amount REAL,
-                     order_id TEXT,
-                     processed BOOLEAN DEFAULT FALSE,
-                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-
         c.execute('''CREATE TABLE IF NOT EXISTS promocodes
                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
                      code TEXT UNIQUE NOT NULL,
@@ -61,25 +56,21 @@ class Database:
                      discount_cells INTEGER NOT NULL,
                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
+        # Инициализируем промокод
         c.execute('SELECT * FROM promocodes WHERE code = ?', ('promocodena18rubley',))
         if not c.fetchone():
             c.execute('INSERT INTO promocodes (code, uses_left, max_uses, discount_cells) VALUES (?, ?, ?, ?)',
                      ('promocodena18rubley', 3, 3, 18))
 
-        conn.commit()
-        conn.close()
+        self.conn.commit()
 
     def get_pixel(self, x, y):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         c.execute('SELECT * FROM pixels WHERE x = ? AND y = ?', (x, y))
-        pixel = c.fetchone()
-        conn.close()
-        return pixel
+        return c.fetchone()
 
     def set_pixel(self, x, y, emoji, username, order_id=None):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         existing = self.get_pixel(x, y)
         if existing:
             c.execute('UPDATE pixels SET emoji = ?, username = ?, order_id = ?, purchased_at = ? WHERE x = ? AND y = ?',
@@ -87,8 +78,7 @@ class Database:
         else:
             c.execute('INSERT INTO pixels (x, y, emoji, username, order_id) VALUES (?, ?, ?, ?, ?)',
                      (x, y, emoji, username, order_id))
-        conn.commit()
-        conn.close()
+        self.conn.commit()
         
         # Отправляем событие всем клиентам
         socketio_app.emit('pixel_update', {
@@ -99,52 +89,33 @@ class Database:
         }, broadcast=True)
 
     def get_all_pixels(self):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         c.execute('SELECT x, y, emoji, username FROM pixels')
         pixels = c.fetchall()
-        conn.close()
         return [{'x': p[0], 'y': p[1], 'emoji': p[2], 'username': p[3]} for p in pixels]
 
     def create_order(self, cells_data, amount, promocode=None):
         order_id = str(uuid.uuid4())[:8]
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         c.execute('INSERT INTO orders (order_id, cells_data, amount, promocode) VALUES (?, ?, ?, ?)',
                  (order_id, json.dumps(cells_data), amount, promocode))
-        conn.commit()
-        conn.close()
+        self.conn.commit()
         return order_id
 
     def get_order(self, order_id):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         c.execute('SELECT * FROM orders WHERE order_id = ?', (order_id,))
-        order = c.fetchone()
-        conn.close()
-        return order
+        return c.fetchone()
 
     def update_order_status(self, order_id, status):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         c.execute('UPDATE orders SET status = ? WHERE order_id = ?', (status, order_id))
-        conn.commit()
-        conn.close()
-
-    def cache_donation(self, username, message, amount, order_id=None):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
-        c.execute('INSERT INTO donations_cache (username, message, amount, order_id) VALUES (?, ?, ?, ?)',
-                 (username, message, amount, order_id))
-        conn.commit()
-        conn.close()
+        self.conn.commit()
 
     def get_promocode(self, code):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         c.execute('SELECT * FROM promocodes WHERE code = ?', (code,))
         promocode = c.fetchone()
-        conn.close()
         if promocode:
             return {
                 'code': promocode[1],
@@ -155,16 +126,13 @@ class Database:
         return None
 
     def use_promocode(self, code):
-        conn = sqlite3.connect('pixels.db', check_same_thread=False)
-        c = conn.cursor()
+        c = self.conn.cursor()
         c.execute('SELECT uses_left FROM promocodes WHERE code = ?', (code,))
         result = c.fetchone()
         if result and result[0] > 0:
             c.execute('UPDATE promocodes SET uses_left = uses_left - 1 WHERE code = ?', (code,))
-            conn.commit()
-            conn.close()
+            self.conn.commit()
             return True
-        conn.close()
         return False
 
 db = Database()
@@ -197,7 +165,6 @@ def connect_to_donationalerts():
                 print("⚠️ Order ID not found in message.")
                 return
 
-            db.cache_donation(username, message, amount, order_id)
             process_donation_message(username, amount, order_id)
 
         except Exception as e:
@@ -266,10 +233,12 @@ def buy_cells():
         if not cells:
             return jsonify({'error': 'No cells selected'}), 400
 
+        # Проверяем, не заняты ли клетки
         for cell in cells:
             if db.get_pixel(cell['x'], cell['y']):
                 return jsonify({'error': f'Cell ({cell["x"]},{cell["y"]}) already taken'}), 400
 
+        # Проверяем промокод
         promocode_data = None
         if promocode:
             promocode_data = db.get_promocode(promocode)
@@ -280,6 +249,7 @@ def buy_cells():
             if len(cells) != promocode_data['discount_cells']:
                 return jsonify({'error': f'This promocode requires exactly {promocode_data["discount_cells"]} cells'}), 400
 
+        # Рассчитываем сумму
         if promocode_data:
             amount = 0.0
         else:
@@ -288,6 +258,7 @@ def buy_cells():
         order_id = db.create_order(cells, amount, promocode if promocode_data else None)
         payment_message = f"order_{order_id}"
 
+        # Используем промокод
         if promocode_data:
             db.use_promocode(promocode)
 
@@ -339,7 +310,7 @@ def check_payment(order_id):
 @socketio_app.on('connect')
 def handle_connect():
     print('🟢 Client connected')
-    # При подключении отправляем все пиксели
+    # Отправляем текущие пиксели новому клиенту
     pixels = db.get_all_pixels()
     socketio_app.emit('initial_pixels', {'pixels': pixels})
 
@@ -356,4 +327,5 @@ import os
 if __name__ == '__main__':
     threading.Thread(target=start_da_connection, daemon=True).start()
     port = int(os.environ.get('PORT', 5000))
+    print(f"🚀 Starting server on port {port}")
     socketio_app.run(app, debug=True, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
